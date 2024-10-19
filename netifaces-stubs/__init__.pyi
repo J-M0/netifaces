@@ -1,4 +1,6 @@
-from typing import Union
+from typing import overload, type_check_only
+
+from typing_extensions import Literal, TypeAlias
 
 AF_12844: int
 AF_APPLETALK: int
@@ -67,6 +69,31 @@ IN6_IFF_SECURED: int
 address_families: dict[int, str]
 version: str
 
-def gateways() -> dict[Union[str, int], Union[dict[int, tuple[str, str]], list[Union[tuple[str, str], tuple[str, str, bool]]]]]: ...
+# In reality, gateways() returns a normal `dict`. However, the
+# current type system cannot accurately express a `dict` that has
+# one literal string key that maps to one type and `int` keys that
+# map to another. Without these aliases and subclass, the closest we
+# could get would be this monstrosity:
+#
+# dict[int | Literal["default"], list[tuple[str, str, bool]] | dict[int, tuple[str, str]]]
+
+_Gateway: TypeAlias = tuple[str, str, bool]
+_DefaultGateway: TypeAlias = tuple[str, str]
+
+_KT: TypeAlias = int | Literal["default"]
+_VT: TypeAlias = list[_Gateway] | dict[int, _DefaultGateway]
+
+@type_check_only
+class _Gateways(dict[_KT, _VT]):
+    @overload
+    def __getitem__(self, key: Literal["default"], /) -> dict[int, _DefaultGateway]: ...
+    @overload
+    def __getitem__(self, key: int, /) -> list[_Gateway]: ...
+    # We need this last overload or else everyone complains
+    # about the signature being incompatible with `Mapping`
+    @overload
+    def __getitem__(self, key: _KT, /) -> _VT: ...
+
+def gateways() -> _Gateways: ...
 def ifaddresses(ifname: str, /) -> dict[int, list[dict[str, str]]]: ...
 def interfaces() -> list[str]: ...
